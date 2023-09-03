@@ -1,6 +1,7 @@
 use crate::web3_domains::ens_naming_service::ens_naming_service::EnsNamingService;
 use crate::web3_domains::naming_service_traits::NamingServiceTrait;
 use crate::web3_domains::uns_naming_service::uns_naming_service::UnsNamingService;
+use crate::web3_domains::utils::domain::normalize_domain;
 
 pub enum NamingService {
     UNS(UnsNamingService),
@@ -38,24 +39,29 @@ impl Web3Domain {
 
     pub async fn new(config: Web3DomainConfig) -> Self {
         Web3Domain {
-            uns: UnsNamingService::new(config.eth_rpc_url.clone(), config.polygon_rpc_url.clone()),
+            uns: UnsNamingService::new(config.eth_rpc_url.clone(), config.polygon_rpc_url.clone())
+                .await,
             ens: EnsNamingService::new(config.eth_rpc_url.clone()).await,
         }
     }
 
     pub fn namehash(self, domain: &str) -> Option<String> {
-        let (label, tld) = Self::split_domain(domain)?;
+        let normalized_domain = normalize_domain(domain);
+
+        let (label, tld) = Self::split_domain(normalized_domain.as_str())?;
 
         let service = self.get_naming_service(tld);
 
-        service.namehash(domain)
+        service.namehash(normalized_domain.as_str())
     }
 
     pub async fn owner_of(self, domain: &str) -> Option<String> {
+        let normalized_domain = normalize_domain(domain);
+
         let (label, tld) = Self::split_domain(domain)?;
 
         let service = self.get_naming_service(tld);
 
-        service.owner(domain).await
+        service.owner(normalized_domain.as_str()).await
     }
 }

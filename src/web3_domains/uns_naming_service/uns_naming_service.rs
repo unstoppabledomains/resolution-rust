@@ -1,14 +1,13 @@
 use crate::web3_domains::naming_service_traits::NamingServiceTrait;
+use crate::web3_domains::utils::configs;
 use ethereum_types::BigEndianHash;
 use sha3::{Digest, Keccak256};
 use web3;
 use web3::contract::{Contract, Options};
 
+use std::path::Path;
 use web3::transports::Http;
 use web3::types::{Address, H256};
-
-const ETH_MAINNET_PROXY_READER_ADDRESS: &str = "0x578853aa776Eef10CeE6c4dd2B5862bdcE767A8B";
-const POLYGON_MAINNET_PROXY_READER_ADDRESS: &str = "0x91EDd8708062bd4233f4Dd0FCE15A7cb4d500091";
 
 pub struct UnsNamingService {
     eth_contract: Contract<Http>,
@@ -16,7 +15,37 @@ pub struct UnsNamingService {
 }
 
 impl UnsNamingService {
-    pub fn new(eth_rpc_url: String, polygon_rpc_url: String) -> Self {
+    async fn load_contract_addresses(
+        eth_network_id: usize,
+        matic_network_id: usize,
+    ) -> Option<(String, String)> {
+        let current_file_path = file!();
+        let current_dir = Path::new(current_file_path).parent().unwrap();
+        let config_file_path = current_dir.join("uns_configs.json");
+
+        match configs::load_config_file(config_file_path).await {
+            Ok(data) => {
+                let eth_network = &data["networks"][eth_network_id.to_string()]["contracts"];
+                let matic_network = &data["networks"][matic_network_id.to_string()]["contracts"];
+
+                let eth_proxy_reader = eth_network["ProxyReader"]["address"].as_str()?.to_string();
+                let matic_proxy_reader = matic_network["ProxyReader"]["address"]
+                    .as_str()?
+                    .to_string();
+
+                Some((eth_proxy_reader, matic_proxy_reader))
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                None
+            }
+        }
+    }
+
+    pub async fn new(eth_rpc_url: String, polygon_rpc_url: String) -> Self {
+        let contract_addresses = Self::load_contract_addresses(1, 137).await;
+        let (eth_proxy_address, matic_proxy_address) = contract_addresses.unwrap();
+
         let eth_transport = web3::transports::Http::new(&eth_rpc_url).unwrap();
         let eth_provider = web3::Web3::new(eth_transport);
 
@@ -25,14 +54,14 @@ impl UnsNamingService {
 
         let eth_contract = Contract::from_json(
             eth_provider.eth(),
-            ETH_MAINNET_PROXY_READER_ADDRESS.parse().unwrap(),
+            eth_proxy_address.parse().unwrap(),
             include_bytes!("./uns_abis.json"),
         )
         .unwrap();
 
         let polygon_contract = Contract::from_json(
             polygon_provider.eth(),
-            POLYGON_MAINNET_PROXY_READER_ADDRESS.parse().unwrap(),
+            matic_proxy_address.parse().unwrap(),
             include_bytes!("./uns_abis.json"),
         )
         .unwrap();

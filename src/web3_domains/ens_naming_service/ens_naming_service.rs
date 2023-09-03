@@ -1,6 +1,6 @@
 use crate::web3_domains::naming_service_traits::NamingServiceTrait;
+use crate::web3_domains::utils::configs;
 use ethereum_types::BigEndianHash;
-use serde::de::Error;
 use sha3::{Digest, Keccak256};
 use web3;
 use web3::contract::{Contract, Options};
@@ -8,26 +8,12 @@ use web3::contract::{Contract, Options};
 use web3::transports::Http;
 use web3::types::{Address, H256};
 
-use serde_json;
-use std::path::{Path, PathBuf};
-use tokio::fs;
+use std::path::Path;
 
 pub struct EnsNamingService {
     registry_contract: Contract<Http>,
     resolver_contract: Contract<Http>,
     name_wrapper_contract: Contract<Http>,
-}
-
-async fn load_config_file(file_path: PathBuf) -> serde_json::Result<serde_json::Value> {
-    let content = fs::read_to_string(file_path).await;
-
-    match content {
-        Ok(content) => serde_json::from_str(&content),
-        Err(e) => {
-            println!("Error: {}", e);
-            return Err(Error::custom("Failed to read config file"));
-        }
-    }
 }
 
 impl EnsNamingService {
@@ -36,7 +22,7 @@ impl EnsNamingService {
         let current_dir = Path::new(current_file_path).parent().unwrap();
         let config_file_path = current_dir.join("ens_config.json");
 
-        match load_config_file(config_file_path).await {
+        match configs::load_config_file(config_file_path).await {
             Ok(data) => {
                 let network = &data["networks"][network_id.to_string()]["contracts"];
 
@@ -118,8 +104,6 @@ impl NamingServiceTrait for EnsNamingService {
 
     async fn owner(&self, domain: &str) -> Option<String> {
         let namehash = EnsNamingService::ens_namehash(domain).unwrap();
-
-        print!("namehash: {:?}\n", namehash);
 
         let mut registry_owner: Result<Address, web3::contract::Error> = self
             .registry_contract
